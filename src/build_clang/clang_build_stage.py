@@ -221,6 +221,7 @@ class ClangBuildStage:
             vars['LIBCXXABI_USE_LLVM_UNWINDER'] = True
 
             extra_linker_flags = []
+
             if is_linux():
                 if self.build_conf.use_compiler_rt:
                     extra_linker_flags.append(
@@ -268,6 +269,21 @@ class ClangBuildStage:
                         os.path.join(self.prev_stage.install_prefix, os_specific_lib_dir)
                     ))
 
+            if self.stage_number >= 3 and is_macos():
+                # extra_linker_flags.append('-L')
+                # extra_linker_flags.append(os.path.join(self.prev_stage.install_prefix, 'lib'))
+                extra_linker_flags.append(os.path.join(self.prev_stage.install_prefix, 'lib', 'libc++.1.dylib'))
+                # extra_linker_flags.append('-nostdlib++')
+                extra_rpath_flags.append(get_rpath_flag(rf'@executable_path/../lib').replace('=', ','))
+                extra_rpath_flags.append(get_rpath_flag(
+                    os.path.join(self.prev_stage.install_prefix, 'lib')
+                ).replace('=', ','))
+                # extra_linker_flags.append('-lc++')
+                # vars.update(CMAKE_INSTALL_RPATH_USE_LINK_PATH=True)
+                # vars['LLVM_ENABLE_LLD'] = True
+                # vars['CMAKE_MACOSX_RPATH'] = True
+                # vars['CMAKE_INSTALL_RPATH'] = os.path.join(self.prev_stage.install_prefix, 'lib')
+
             extra_linker_flags.extend(extra_rpath_flags)
             extra_linker_flags_str = ' '.join(extra_linker_flags)
             vars.update(
@@ -307,6 +323,10 @@ class ClangBuildStage:
                 # even though we build it for the second stage as well.
                 CLANG_DEFAULT_RTLIB='compiler-rt',
             )
+            if is_macos():
+                vars['CMAKE_LIBTOOL'] = os.path.join(self.prev_stage.install_prefix, 'bin', 'llvm-libtool-darwin')
+        if self.stage_number >= 4:
+           vars['LLVM_PARALLEL_LINK_JOBS'] = '2'
 
         if self.build_conf.use_compiler_wrapper:
             vars.update(get_cmake_args_for_compiler_wrapper())
@@ -503,7 +523,8 @@ class ClangBuildStage:
                             self.log_info("Copying file %s to %s", src_path, dst_path)
                             shutil.copyfile(src_path, dst_path)
 
-                validate_build_output_arch(self.build_conf.target_arch, self.install_prefix)
+                validate_build_output_arch(
+                    self.build_conf.target_arch, self.build_conf.get_final_install_dir() if self.is_last_stage else self.install_prefix)
 
     def check_dynamic_libraries(self) -> None:
         for root, dirs, files in os.walk(self.install_prefix):
